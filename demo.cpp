@@ -64,7 +64,7 @@ int main() {
     // change output functions
     PF_SET_OUTPUT_FUNCTION(customProfilerOutput);
     PF_SET_AVERAGE_TIMER_INFO_OUTPUT_FUNCTION(customAverageTimerOutput);
-    std::cout << "\naverage timer, automatic logging, 500ms sleep, custom output functions\n";
+    std::cout << "\naverage timer, automatic logging, 500ms sleep, custom output functions:\n";
     for(int i = 0; i < 30; i++){
         PF_AVERAGE_TIMER("avg timer");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
