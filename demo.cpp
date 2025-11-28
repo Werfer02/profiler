@@ -5,12 +5,16 @@
 #include "profiler.hpp"  
 
 void customProfilerOutput(const std::string& id, profiler::profilerClock::duration t) {
-    *profiler::defaultProfilerOutputStream << "(custom output) " << id << " took " << std::chrono::duration<profiler::profilerDurationT>(t).count() << "s.\n";
+    *profiler::defaultProfilerOutputStream << "(custom output) " 
+                                           << id << " took " 
+                                           << std::chrono::duration<double>(t).count() * profiler::profilerDurationScale 
+                                           << profiler::getUnitSuffix(profiler::profilerDurationScale) << "\n";
 }
 
-void customAverageTimerOutput(profiler::profilerClock::time_point start) {
+void customAverageTimerOutput(profiler::profilerClock::duration start) {
     *profiler::defaultProfilerOutputStream << "(custom output) elapsed time: "
-              << std::chrono::duration<profiler::profilerDurationT>(profiler::profilerClock::now() - start).count() << "s.\n";
+                                           << std::chrono::duration<double>(profiler::profilerClock::now() - start).count() * profiler::profilerDurationScale 
+                                           << profiler::getUnitSuffix(profiler::profilerDurationScale) << "\n";
 }
 
 int main() {
@@ -20,7 +24,7 @@ int main() {
     t.start();
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     auto duration = t.stop();
-    std::cout << "manual timer took: " << std::chrono::duration<profiler::profilerDurationT>(duration).count() << "s.\n";
+    std::cout << "manual timer took: " << std::chrono::duration<double>(duration).count()  * profiler::profilerDurationScale << "s.\n";
 
     // scope timer
     std::cout << "scope timer:\n";
@@ -58,13 +62,13 @@ int main() {
     // change profiler clock
     PF_SET_PROFILER_CLOCK(std::chrono::system_clock);
 
-    // change profiler duration type (float, double, etc)
-    PF_SET_PROFILER_DURATION_T(float);
+    // change profiler duration unit (seconds, milliseconds, etc)
+    PF_SET_PROFILER_DURATION_UNIT(std::chrono::minutes);
 
     // change output functions
     PF_SET_OUTPUT_FUNCTION(customProfilerOutput);
     PF_SET_AVERAGE_TIMER_INFO_OUTPUT_FUNCTION(customAverageTimerOutput);
-    std::cout << "\naverage timer, automatic logging, 500ms sleep, custom output functions:\n";
+    std::cout << "\naverage timer, automatic logging, 500ms sleep, milliseconds duration unit, custom output functions:\n";
     for(int i = 0; i < 30; i++){
         PF_AVERAGE_TIMER("avg timer");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -74,7 +78,7 @@ int main() {
     std::ofstream file("output.txt");
     PF_SET_OUTPUT_STREAM(&file);
     std::cout << "\nchanged output stream to file, check output.txt\n";
-    file << "average timer, automatic logging, 500ms sleep, custom output functions, output to file:\n";
+    file << "average timer, automatic logging, 500ms sleep, milliseconds duration unit, custom output functions, output to file:\n";
     for(int i = 0; i < 30; i++){
         PF_AVERAGE_TIMER("avg timer");
         std::this_thread::sleep_for(std::chrono::milliseconds(100));

@@ -9,46 +9,78 @@
 
 namespace profiler {
 
-using profilerClock = std::chrono::high_resolution_clock;
-template <typename clockT>
-void setProfilerClock(){
-    using profilerClock = clockT;
+static const std::map<long long, std::string_view> timeSuffixes = {
+    {1000000000LL,    "s"  },    // 1s
+    {1000000LL,       "ms" },   // 1ms
+    {1000LL,          "us" },   // 1us
+    {1LL,             "ns" },   // 1ns
+    {60000000000LL,   "min"},  // 1min
+    {3600000000000LL, "h"  },    // 1h
+    {86400000000000LL,"d"  }     // 1d
+};
+
+std::string_view getUnitSuffix(double scale) {
+    auto it = profiler::timeSuffixes.find((1/scale) * 1000000000LL);
+    return it != profiler::timeSuffixes.end() ? it->second : "?";
 }
 
-using profilerDurationT = double;
+class profilerClock {
+public:
+    using duration = std::chrono::high_resolution_clock::duration;
+    using time_point = std::chrono::high_resolution_clock::time_point;
+    static std::function<duration()> nowFunction;
+
+    static duration now() {
+        return nowFunction();
+    }
+};
+std::function<profilerClock::duration()> profilerClock::nowFunction = [] { return std::chrono::high_resolution_clock::now().time_since_epoch(); };
+
+template <typename clockT>
+void setProfilerClock() {
+    profilerClock::nowFunction = [] {
+        return std::chrono::duration_cast<profilerClock::duration>(
+            clockT::now().time_since_epoch()
+        );
+    };
+}
+
+inline double profilerDurationScale = 1.0;
 template <typename durationT>
-void setProfilerDurationT(){
-    using profilerDurationT = durationT;
+void setProfilerDurationScale() {
+    profilerDurationScale = (double)durationT::period::den / (double)durationT::period::num;
 }
 
 using ProfilerOutputFunction = std::function<void(const std::string&, profilerClock::duration)>;
-using AverageTimerInfoOutputFunction = std::function<void(profilerClock::time_point)>;
+using AverageTimerInfoOutputFunction = std::function<void(profilerClock::duration)>;
 
 std::ostream* defaultProfilerOutputStream = &std::cout;
 
-void id_took_t_s(const std::string& id, profilerClock::duration t) {
+void id_took_t_suffix(const std::string& id, profilerClock::duration t) {
     *defaultProfilerOutputStream
-            << std::setprecision(std::numeric_limits<profilerDurationT>::digits10)
+            << std::setprecision(6)
             << "|| " << id << " took "
-            << std::chrono::duration<profilerDurationT>(t).count() << "s\n";
+            << std::chrono::duration<double>(t).count() * profilerDurationScale
+            << getUnitSuffix(profilerDurationScale) << "\n";
 }
 
-void id_colon_t_s(const std::string& id, profilerClock::duration t) {
+void id_colon_t_suffix(const std::string& id, profilerClock::duration t) {
     *defaultProfilerOutputStream
-            << std::setprecision(std::numeric_limits<profilerDurationT>::digits10)
+            << std::setprecision(6)
             << "|| " << id << ": "
-            << std::chrono::duration<profilerDurationT>(t).count() << "s\n";
+            << std::chrono::duration<double>(t).count() * profilerDurationScale
+            << getUnitSuffix(profilerDurationScale) << "\n";
 }
 
-void elapsed_time_colon_t_s(profilerClock::time_point);
+void elapsed_time_colon_t_suffix(profilerClock::duration);
 
-ProfilerOutputFunction defaultProfilerOutputFunction = id_took_t_s;
-AverageTimerInfoOutputFunction defaultAverageTimerInfoOutputFunction = elapsed_time_colon_t_s;
+ProfilerOutputFunction defaultProfilerOutputFunction = id_took_t_suffix;
+AverageTimerInfoOutputFunction defaultAverageTimerInfoOutputFunction = elapsed_time_colon_t_suffix;
 
 profilerClock::duration defaultAverageTimerSleepDuration = std::chrono::seconds(1);
 
 class Timer {
-    profilerClock::time_point begin;
+    profilerClock::duration begin;
 public:
     void start() {
         begin = profilerClock::now();
@@ -61,7 +93,7 @@ public:
 class AverageTimerManager {
     static std::mutex collectedTimesMapMutex;
     static std::map<std::string, std::vector<profilerClock::duration>> collectedTimesMap;
-    static profilerClock::time_point profilerStartTime;
+    static profilerClock::duration profilerStartTime;
     static bool startTimeSet;
     static bool loggingEnabled;
 public:
@@ -76,7 +108,7 @@ public:
         }
     }
 
-    static void setStartTime(profilerClock::time_point t){
+    static void setStartTime(profilerClock::duration t) {
         profilerStartTime = t;
         startTimeSet = true;
     }
@@ -97,7 +129,7 @@ public:
 
     static void startLoggingThread() {
         if(!startTimeSet) setStartTime(profilerClock::now());
-        if(!loggingEnabled){
+        if(!loggingEnabled) {
             std::thread t(logLoop);
             if (t.joinable()) {
                 t.detach();
@@ -108,15 +140,15 @@ public:
 };
 std::mutex AverageTimerManager::collectedTimesMapMutex;
 std::map<std::string, std::vector<profilerClock::duration>> AverageTimerManager::collectedTimesMap;
-profilerClock::time_point AverageTimerManager::profilerStartTime;
+profilerClock::duration AverageTimerManager::profilerStartTime;
 bool AverageTimerManager::startTimeSet = false;
 bool AverageTimerManager::loggingEnabled = false;
 
-void elapsed_time_colon_t_s(profilerClock::time_point start) {
+void elapsed_time_colon_t_suffix(profilerClock::duration start) {
     *defaultProfilerOutputStream
             << "|| elapsed time: "
-            << std::chrono::duration<profilerDurationT>(profilerClock::now() - start).count()
-            << "s\n";
+            << std::chrono::duration<double>(profilerClock::now() - start).count() * profilerDurationScale
+            << getUnitSuffix(profilerDurationScale) << "\n";
 }
 
 class AverageTimer {
@@ -156,7 +188,7 @@ public:
 #define PF_AVERAGE_TIMER_LOG() profiler::AverageTimerManager::log()
 
 #define PF_SET_PROFILER_CLOCK(x) profiler::setProfilerClock<x>()
-#define PF_SET_PROFILER_DURATION_T(x) profiler::setProfilerDurationT<x>()
+#define PF_SET_PROFILER_DURATION_UNIT(x) profiler::setProfilerDurationScale<x>()
 #define PF_SET_OUTPUT_FUNCTION(x) profiler::defaultProfilerOutputFunction = (x)
 #define PF_SET_OUTPUT_STREAM(x) profiler::defaultProfilerOutputStream = (x)
 #define PF_SET_AVERAGE_TIMER_INFO_OUTPUT_FUNCTION(x) profiler::defaultAverageTimerInfoOutputFunction = (x)
