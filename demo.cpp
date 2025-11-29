@@ -34,7 +34,7 @@ int main() {
     }
 
     // average timer manual logging
-    PF_SET_AVERAGE_TIMER_START_TIME();
+    PF_SET_PROFILER_START_TIME();
     std::cout << "\naverage timer, manual logging:\n";
     for(int i = 0; i < 20; i++){
         PF_AVERAGE_TIMER("avg timer");
